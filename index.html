@@ -9,6 +9,13 @@
 body{margin:0;font-family:Inter, Arial, sans-serif;background:linear-gradient(135deg,var(--bg1),var(--bg2));display:flex;flex-direction:column;align-items:center;min-height:100vh;color:#111827;padding:18px}
 #top-bar{margin-bottom:16px;display:flex;gap:18px;font-size:18px;align-items:center}
 #resetBtn{padding:10px 16px;font-size:14px;border:none;border-radius:8px;background:var(--accent);color:white;cursor:pointer;box-shadow:0 6px 18px rgba(255,0,0,0.18)}
+  #rankingBtn {
+  margin-top: 10px;
+  border: 2px solid #444;
+  background-color: #aaa;
+  font-size: 25px;
+  margin-left: 10px; /* separarlo un poco */
+}
 #turnIndicator{font-weight:700}
 #game{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:min(88vmin,920px);height:min(88vmin,920px)}
 .big-board{background:var(--card);border:6px solid #cbd5e1;border-radius:10px;display:grid;grid-template-columns:repeat(3,1fr);aspect-ratio:1/1;position:relative;overflow:hidden;transition:border-color 220ms ease,box-shadow 220ms ease,transform 200ms ease}
@@ -31,6 +38,7 @@ body{margin:0;font-family:Inter, Arial, sans-serif;background:linear-gradient(13
 <div id="top-bar">
   <div id="turnIndicator">Turno: X</div>
   <button id="resetBtn">Reiniciar</button>
+  <button id="rankingYemazo" onclick="window.location.href='https://tudominio.com/ranking';">Ranking Elo</button>
 </div>
 <div id="botControls">
   <label>Modo Bot: </label>
@@ -263,3 +271,4 @@ init();
 </script>
 </body>
 </html>
+
