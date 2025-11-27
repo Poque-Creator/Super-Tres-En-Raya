@@ -6,16 +6,16 @@
 <style>
   body { font-family: sans-serif; background: #f0f4f8; color: #111; text-align: center; }
   #game { display: grid; grid-template-columns: repeat(3, 200px); gap: 10px; justify-content:center; margin-top:20px; }
-  .board { background:#dbeafe; display:grid; grid-template-columns:repeat(3,1fr); aspect-ratio:1; position:relative; }
-  .cell { border:1px solid #2563eb; display:flex; justify-content:center; align-items:center; font-size:2em; cursor:pointer; background:#93c5fd; }
+  .board { background:#dbeafe; display:grid; grid-template-columns:repeat(3,1fr); aspect-ratio:1; position:relative; border-radius:10px; }
+  .cell { border:1px solid #2563eb; display:flex; justify-content:center; align-items:center; font-size:2em; cursor:pointer; background:#93c5fd; transition:0.2s; }
+  .cell.allowed { outline:3px solid #facc15; }
   .cell.disabled { pointer-events:none; opacity:0.6; }
-  .cell.allowed { outline:3px solid #fbbf24; }
   .x-mark { color:red; font-weight:bold; }
   .o-mark { color:blue; font-weight:bold; }
   .big-winner { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; font-size:3em; pointer-events:none; }
   #top-bar { margin-top:10px; }
-  #onlineControls input { padding:5px; border-radius:5px; border:1px solid #999; }
-  #onlineControls button { padding:5px 10px; border-radius:5px; border:none; background:#2563eb; color:white; cursor:pointer; }
+  #onlineControls input { padding:5px; border-radius:5px; border:1px solid #999; width:100px; }
+  #onlineControls button { padding:5px 10px; border-radius:5px; border:none; background:#2563eb; color:white; cursor:pointer; margin-left:5px; }
 </style>
 
 <!-- Firebase scripts -->
@@ -46,14 +46,17 @@ let nextRequired=null;
 let bigBoardWinners=Array(9).fill(null);
 let boards=[];
 let gameOver=false;
-  
+
+/* ---------------- Firebase Config ---------------- */
+/* REEMPLAZA ESTE OBJETO CON TU firebaseConfig DE FIREBASE */
 const firebaseConfig = {
-  apiKey: "AIzaSyDdGTY54_gKiCHutZUdo0dfN0HXbEE4Tok",
-  authDomain: "super-tres-en-raya.firebaseapp.com",
-  projectId: "super-tres-en-raya",
-  storageBucket: "super-tres-en-raya.firebasestorage.app",
-  messagingSenderId: "1095062617604",
-  appId: "1:1095062617604:web:b8c3577d78b1a660e03f51"
+  apiKey: "TU_APIKEY",
+  authDomain: "TU_PROJECT.firebaseapp.com",
+  databaseURL: "https://TU_PROJECT.firebaseio.com",
+  projectId: "TU_PROJECT",
+  storageBucket: "TU_PROJECT.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID"
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
@@ -75,6 +78,7 @@ const resetBtn = document.getElementById('resetBtn');
 function createBoardUI(){
   const gameDiv = document.getElementById('game');
   gameDiv.innerHTML='';
+  boards=[];
   for(let b=0;b<9;b++){
     const board = document.createElement('div');
     board.className='board';
@@ -180,16 +184,19 @@ resetBtn.addEventListener('click', ()=>{
 /* ------------------- Firebase online ------------------- */
 function generateRoomId(){ return Math.random().toString(36).slice(2,8); }
 
+/* Crear sala */
 createRoomBtn.addEventListener('click', ()=>{
-  const id = roomInput.value.trim()||generateRoomId();
+  let id = roomInput.value.trim();
+  if(!id){ id=generateRoomId(); roomInput.value=id; }
   roomId=id;
   isHost=true;
   playerSymbol='X';
   pushStateToFirebase();
   db.ref('rooms/'+roomId+'/state').on('value', onRemoteStateChange);
-  roomStatus.innerHTML=Sala creada: <strong>{roomId}</strong> (Host - X);
+  roomStatus.innerHTML = Sala creada: <strong>${roomId}</strong> (Host - X);
 });
 
+/* Unirse a sala */
 joinRoomBtn.addEventListener('click', ()=>{
   const id=roomInput.value.trim();
   if(!id){ alert('Pon un código de sala'); return; }
@@ -198,9 +205,10 @@ joinRoomBtn.addEventListener('click', ()=>{
   isHost=false;
   db.ref('rooms/'+roomId+'/state').on('value', onRemoteStateChange);
   db.ref('rooms/'+roomId+'/state').once('value').then(snap=>{if(snap.exists()) applyRemoteState(snap.val());});
-  roomStatus.textContent=Conectado sala ${roomId} (O);
+  roomStatus.innerHTML = Conectado sala: <strong>${roomId}</strong> (O);
 });
 
+/* Enviar estado a Firebase */
 function pushStateToFirebase(){
   if(!roomId) return;
   const state={
@@ -213,6 +221,7 @@ function pushStateToFirebase(){
   db.ref('rooms/'+roomId+'/state').set(state);
 }
 
+/* Recibir cambios de Firebase */
 function onRemoteStateChange(snapshot){
   const val=snapshot.val();
   if(!val) return;
@@ -221,6 +230,7 @@ function onRemoteStateChange(snapshot){
   applyingRemote=false;
 }
 
+/* Aplicar estado remoto */
 function applyRemoteState(state){
   state.boards.forEach((boardArr,bi)=>{
     boardArr.forEach((cellVal,ci)=>{
@@ -242,7 +252,7 @@ function applyRemoteState(state){
       overlay.className='big-winner';
       overlay.innerHTML=bigBoardWinners[i]==='X'?'<span class="x-mark">X</span>':'<span class="o-mark">O</span>';
       boardEl.appendChild(overlay);
-      boardEl.cells.forEach(c=>{ c.classList.add('disabled'); });
+      boardEl.cells.forEach(c=>c.classList.add('disabled'));
     }
   }
   currentPlayer=state.currentPlayer;
@@ -258,4 +268,3 @@ updateHighlights();
 </script>
 </body>
 </html>
-
