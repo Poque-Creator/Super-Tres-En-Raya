@@ -4,30 +4,35 @@
 <meta charset="UTF-8">
 <title>Super Tres-en-raya</title>
 <style>
-  body { font-family: sans-serif; background: #f0f4f8; color: #111; text-align: center; }
-  #game { display: grid; grid-template-columns: repeat(3, 200px); gap: 10px; justify-content:center; margin-top:20px; }
-  .board { background:#dbeafe; display:grid; grid-template-columns:repeat(3,1fr); aspect-ratio:1; position:relative; border-radius:10px; }
-  .cell { border:1px solid #2563eb; display:flex; justify-content:center; align-items:center; font-size:2em; cursor:pointer; background:#93c5fd; transition:0.2s; }
-  .cell.allowed { outline:3px solid #facc15; }
-  .cell.disabled { pointer-events:none; opacity:0.6; }
-  .x-mark { color:red; font-weight:bold; }
-  .o-mark { color:blue; font-weight:bold; }
-  .big-winner { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; font-size:3em; pointer-events:none; }
-  #top-bar { margin-top:10px; }
-  #onlineControls input { padding:5px; border-radius:5px; border:1px solid #999; width:100px; }
-  #onlineControls button { padding:5px 10px; border-radius:5px; border:none; background:#2563eb; color:white; cursor:pointer; margin-left:5px; }
+body { font-family:sans-serif; background:#f0f4f8; color:#111; text-align:center; }
+#game { display:grid; grid-template-columns:repeat(3,200px); gap:10px; justify-content:center; margin-top:20px; }
+.board { background:#dbeafe; display:grid; grid-template-columns:repeat(3,1fr); aspect-ratio:1; position:relative; border-radius:10px; }
+.cell { border:1px solid #2563eb; display:flex; justify-content:center; align-items:center; font-size:2em; cursor:pointer; background:#93c5fd; transition:0.2s; }
+.cell.allowed { outline:3px solid #facc15; }
+.cell.disabled { pointer-events:none; opacity:0.6; }
+.x-mark { color:red; font-weight:bold; }
+.o-mark { color:blue; font-weight:bold; }
+.big-winner { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; justify-content:center; align-items:center; font-size:3em; pointer-events:none; }
+#top-bar { margin-top:10px; }
+#controls button { padding:5px 10px; border-radius:5px; border:none; background:#2563eb; color:white; cursor:pointer; margin:5px; }
+#onlineControls input { padding:5px; border-radius:5px; border:1px solid #999; width:100px; }
 </style>
-
-<!-- Firebase scripts -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
 <h1>Super Tres-en-raya</h1>
+
 <div id="top-bar">
   <span id="turnIndicator">Turno: X</span>
   <button id="resetBtn">Reiniciar</button>
+</div>
+
+<div id="controls">
+  <button id="localBtn">Jugar Local</button>
+  <button id="botEasyBtn">Contra Bot Fácil</button>
+  <button id="botHardBtn">Contra Bot Difícil</button>
 </div>
 
 <div id="onlineControls" style="margin-top:10px;">
@@ -47,16 +52,17 @@ let bigBoardWinners=Array(9).fill(null);
 let boards=[];
 let gameOver=false;
 
+/* Modo de juego: 'local', 'botEasy', 'botHard', 'online' */
+let gameMode = null;
+
 /* ---------------- Firebase Config ---------------- */
-/* REEMPLAZA ESTE OBJETO CON TU firebaseConfig DE FIREBASE */
 const firebaseConfig = {
-  apiKey: "TU_APIKEY",
-  authDomain: "TU_PROJECT.firebaseapp.com",
-  databaseURL: "https://TU_PROJECT.firebaseio.com",
-  projectId: "TU_PROJECT",
-  storageBucket: "TU_PROJECT.appspot.com",
-  messagingSenderId: "TU_SENDER_ID",
-  appId: "TU_APP_ID"
+  apiKey: "AIzaSyDdGTY54_gKiCHutZUdo0dfN0HXbEE4Tok",
+  authDomain: "super-tres-en-raya.firebaseapp.com",
+  projectId: "super-tres-en-raya",
+  storageBucket: "super-tres-en-raya.firebasestorage.app",
+  messagingSenderId: "1095062617604",
+  appId: "1:1095062617604:web:b8c3577d78b1a660e03f51"
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
@@ -73,6 +79,9 @@ const joinRoomBtn = document.getElementById('joinRoomBtn');
 const roomStatus = document.getElementById('roomStatus');
 const turnIndicator = document.getElementById('turnIndicator');
 const resetBtn = document.getElementById('resetBtn');
+const localBtn = document.getElementById('localBtn');
+const botEasyBtn = document.getElementById('botEasyBtn');
+const botHardBtn = document.getElementById('botHardBtn');
 
 /* ------------------- Crear tablero ------------------- */
 function createBoardUI(){
@@ -108,7 +117,7 @@ function handleMove(boardEl, cellEl){
   if(cellEl.textContent) return;
   if(bigBoardWinners[bigIndex]) return;
 
-  if(roomId){
+  if(gameMode==='online'){
     if(!playerSymbol) return;
     if(currentPlayer!==playerSymbol) return;
   }
@@ -124,21 +133,17 @@ function handleMove(boardEl, cellEl){
   updateHighlights();
   checkGlobalWinner();
 
-  if(roomId) pushStateToFirebase();
+  if(gameMode==='online') pushStateToFirebase();
+  if(gameMode==='botEasy' || gameMode==='botHard') botMove();
 }
 
 /* ------------------- Resaltar tablero permitido ------------------- */
 function updateHighlights(){
   boards.forEach((b,i)=>{
-    b.cells.forEach(c=>{
-      c.classList.remove('allowed');
-    });
+    b.cells.forEach(c=>{ c.classList.remove('allowed'); });
     if(gameOver) return;
-    if(nextRequired===null){
-      b.cells.forEach(c=>c.classList.add('allowed'));
-    } else if(!bigBoardWinners[nextRequired]){
-      b.cells.forEach(c=>c.classList.add('allowed'));
-    }
+    if(nextRequired===null){ b.cells.forEach(c=>c.classList.add('allowed')); }
+    else if(!bigBoardWinners[nextRequired]) b.cells.forEach(c=>c.classList.add('allowed'));
   });
 }
 
@@ -181,11 +186,35 @@ resetBtn.addEventListener('click', ()=>{
   updateHighlights();
 });
 
+/* ------------------- Modo local / bot ------------------- */
+localBtn.addEventListener('click', ()=>{ gameMode='local'; alert('Modo local activado'); });
+botEasyBtn.addEventListener('click', ()=>{ gameMode='botEasy'; alert('Modo Bot Fácil activado'); });
+botHardBtn.addEventListener('click', ()=>{ gameMode='botHard'; alert('Modo Bot Difícil activado'); });
+
+function botMove(){
+  if(gameOver) return;
+  if(currentPlayer==='X') return;
+  // Fácil: mueve aleatorio
+  if(gameMode==='botEasy'){
+    let allowed = [];
+    boards.forEach((b,i)=>{ if(!bigBoardWinners[i] && (nextRequired===null||nextRequired===i)){ b.cells.forEach((c,ci)=>{ if(!c.textContent) allowed.push({b:i,c:ci}); }); } });
+    if(allowed.length>0){
+      const move = allowed[Math.floor(Math.random()*allowed.length)];
+      document.getElementById(b${move.b}c${move.c}).click();
+    }
+  }
+  // Difícil: primero intenta ganar o bloquear
+  if(gameMode==='botHard'){
+    let played=false;
+    for(let i=0;i<9;i++){ if(bigBoardWinners[i]) continue; const b = boards[i]; const cells = b.cells.map(c=>c.textContent); const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; for(const w of wins){ let vals = w.map(idx=>cells[idx]); if(vals.filter(v=>v==='O').length===2 && vals.includes('')){ const idx=w[vals.indexOf('')]; document.getElementById(b${i}c${idx}).click(); played=true; return; } } } if(!played){ // bloquear X for(let i=0;i<9;i++){ if(bigBoardWinners[i]) continue; const b = boards[i]; const cells = b.cells.map(c=>c.textContent); const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]; for(const w of wins){ let vals = w.map(idx=>cells[idx]); if(vals.filter(v=>'X'===v).length===2 && vals.includes('')){ const idx=w[vals.indexOf('')]; document.getElementById(b${i}c${idx}).click(); played=true; return; } } } } if(!played){ // aleatorio let allowed = []; boards.forEach((b,i)=>{ if(!bigBoardWinners[i] && (nextRequired===null||nextRequired===i)){ b.cells.forEach((c,ci)=>{ if(!c.textContent) allowed.push({b:i,c:ci}); }); } }); if(allowed.length>0){ const move = allowed[Math.floor(Math.random()*allowed.length)]; document.getElementById(b${move.b}c${move.c}).click(); } }
+  }
+}
+
 /* ------------------- Firebase online ------------------- */
 function generateRoomId(){ return Math.random().toString(36).slice(2,8); }
 
-/* Crear sala */
 createRoomBtn.addEventListener('click', ()=>{
+  gameMode='online';
   let id = roomInput.value.trim();
   if(!id){ id=generateRoomId(); roomInput.value=id; }
   roomId=id;
@@ -196,8 +225,8 @@ createRoomBtn.addEventListener('click', ()=>{
   roomStatus.innerHTML = Sala creada: <strong>${roomId}</strong> (Host - X);
 });
 
-/* Unirse a sala */
 joinRoomBtn.addEventListener('click', ()=>{
+  gameMode='online';
   const id=roomInput.value.trim();
   if(!id){ alert('Pon un código de sala'); return; }
   roomId=id;
@@ -208,7 +237,6 @@ joinRoomBtn.addEventListener('click', ()=>{
   roomStatus.innerHTML = Conectado sala: <strong>${roomId}</strong> (O);
 });
 
-/* Enviar estado a Firebase */
 function pushStateToFirebase(){
   if(!roomId) return;
   const state={
@@ -221,7 +249,6 @@ function pushStateToFirebase(){
   db.ref('rooms/'+roomId+'/state').set(state);
 }
 
-/* Recibir cambios de Firebase */
 function onRemoteStateChange(snapshot){
   const val=snapshot.val();
   if(!val) return;
@@ -230,7 +257,6 @@ function onRemoteStateChange(snapshot){
   applyingRemote=false;
 }
 
-/* Aplicar estado remoto */
 function applyRemoteState(state){
   state.boards.forEach((boardArr,bi)=>{
     boardArr.forEach((cellVal,ci)=>{
