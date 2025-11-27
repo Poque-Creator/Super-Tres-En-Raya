@@ -187,7 +187,7 @@ createRoomBtn.addEventListener('click', ()=>{
   playerSymbol='X';
   pushStateToFirebase();
   db.ref('rooms/'+roomId+'/state').on('value', onRemoteStateChange);
-  roomStatus.textContent=Sala ${roomId} (Host - X);
+  roomStatus.innerHTML=Sala creada: <strong>{roomId}</strong> (Host - X);
 });
 
 joinRoomBtn.addEventListener('click', ()=>{
@@ -258,3 +258,4 @@ updateHighlights();
 </script>
 </body>
 </html>
+
