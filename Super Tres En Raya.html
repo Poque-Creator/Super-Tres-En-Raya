@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Super Tres-en-raya</title>
+<style>
+:root{--bg1:#ffefd5;--bg2:#ffd1dc;--card:#fff;--accent:red;--accent-weak:rgba(255,0,0,0.15);--x:red;--o:blue}
+body{margin:0;font-family:Inter, Arial, sans-serif;background:linear-gradient(135deg,var(--bg1),var(--bg2));display:flex;flex-direction:column;align-items:center;min-height:100vh;color:#111827;padding:18px}
+#top-bar{margin-bottom:16px;display:flex;gap:18px;font-size:18px;align-items:center}
+#resetBtn{padding:10px 16px;font-size:14px;border:none;border-radius:8px;background:var(--accent);color:white;cursor:pointer;box-shadow:0 6px 18px rgba(255,0,0,0.18)}
+#turnIndicator{font-weight:700}
+#game{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:min(88vmin,920px);height:min(88vmin,920px)}
+.big-board{background:var(--card);border:6px solid #cbd5e1;border-radius:10px;display:grid;grid-template-columns:repeat(3,1fr);aspect-ratio:1/1;position:relative;overflow:hidden;transition:border-color 220ms ease,box-shadow 220ms ease,transform 200ms ease}
+.big-board.super-highlight{border-color:var(--accent);box-shadow:0 10px 40px var(--accent-weak);transform:translateY(-3px) scale(1.03)}
+@keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(255,0,0,0.12)}50%{box-shadow:0 0 30px 8px rgba(255,0,0,0.06)}100%{box-shadow:0 0 0 0 rgba(255,0,0,0.0)}}
+.big-board.super-highlight::after{content:'';position:absolute;inset:0;border-radius:10px;pointer-events:none;animation:pulse-ring 1200ms infinite}
+.cell{border:1px solid #94a3b8;display:flex;justify-content:center;align-items:center;font-size:clamp(18px,3.6vmin,34px);cursor:pointer;background:linear-gradient(180deg,#d1d5db,#e6eef8);transition:transform 140ms ease,box-shadow 140ms ease,background 140ms ease}
+.cell:hover{transform:scale(1.03)}
+.cell.disabled{cursor:default;opacity:0.7}
+.cell.allowed{background:linear-gradient(180deg,#fff7f7,#ffecec);box-shadow:0 6px 18px rgba(255,99,99,0.12)}
+.x-mark{color:var(--x);font-weight:800}
+.o-mark{color:var(--o);font-weight:800}
+.big-winner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(44px,12vmin,140px);font-weight:900;background:linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,255,255,0.8))}
+#gameResultBanner{position:fixed;left:50%;top:18px;transform:translateX(-50%);background:#111827;color:#fff;padding:12px 20px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.3);display:none;font-weight:700;z-index:60}
+#botControls{margin-bottom:16px;display:flex;gap:10px;align-items:center;font-size:16px}
+</style>
+</head>
+<body>
+<div id="gameResultBanner"></div>
+<div id="top-bar">
+  <div id="turnIndicator">Turno: X</div>
+  <button id="resetBtn">Reiniciar</button>
+</div>
+<div id="botControls">
+  <label>Modo Bot: </label>
+  <select id="modeSelect">
+    <option value="pvp">Jugador vs Jugador</option>
+    <option value="bot_easy">Bot Fácil</option>
+    <option value="bot_hard">Bot Difícil</option>
+  </select>
+</div>
+<div id="game"></div>
+<script>
+const gameEl=document.getElementById('game');
+const resetBtn=document.getElementById('resetBtn');
+const turnIndicator=document.getElementById('turnIndicator');
+const banner=document.getElementById('gameResultBanner');
+const modeSelect=document.getElementById('modeSelect');
+let currentPlayer='X';
+let nextRequired=null;
+let bigBoardWinners=Array(9).fill(null);
+let boards=[];
+let gameOver=false;
+let botMode='pvp';
+const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+modeSelect.addEventListener('change',()=>{botMode=modeSelect.value});
+
+function createBoard(index){
+  const board=document.createElement('div');
+  board.className='big-board';
+  board.dataset.index=index;
+  const cells=[];
+  for(let i=0;i<9;i++){
+    const cell=document.createElement('div');
+    cell.className='cell';
+    cell.dataset.index=i;
+    cell.addEventListener('click',()=>handleMove(board,cell));
+    board.appendChild(cell);
+    cells.push(cell);
+  }
+  return {board,cells};
+}
+
+function init(){
+  gameEl.innerHTML='';
+  boards=[];
+  bigBoardWinners=Array(9).fill(null);
+  currentPlayer='X';
+  nextRequired=null;
+  gameOver=false;
+  turnIndicator.textContent='Turno: '+currentPlayer;
+  banner.style.display='none';
+  for(let i=0;i<9;i++){
+    const b=createBoard(i);
+    boards.push(b);
+    gameEl.appendChild(b.board);
+  }
+  updateHighlights();
+  if(botMode.startsWith('bot') && currentPlayer==='O'){botMove()}
+}
+
+function updateHighlights(){
+  boards.forEach((b,i)=>{
+    b.board.classList.remove('super-highlight');
+    b.cells.forEach(c=>c.classList.remove('allowed'));
+    if(bigBoardWinners[i]){
+      b.board.querySelectorAll('.cell').forEach(c=>c.classList.add('disabled'));
+      return;
+    }
+    if(nextRequired===null||nextRequired===i){
+      b.board.classList.add('super-highlight');
+      b.cells.forEach(c=>{if(!c.textContent)c.classList.add('allowed')});
+    }
+  });
+}
+
+function handleMove(boardEl,cellEl){
+  if(gameOver)return;
+  const bigIndex=Number(boardEl.dataset.index);
+  const cellIndex=Number(cellEl.dataset.index);
+  if(nextRequired!==null&&nextRequired!==bigIndex)return;
+  if(cellEl.textContent)return;
+  if(bigBoardWinners[bigIndex])return;
+  cellEl.innerHTML=currentPlayer==='X'?'<span class="x-mark">X</span>':'<span class="o-mark">O</span>';
+  checkSmallWin(bigIndex);
+  nextRequired=cellIndex;
+  if(nextRequired!==null&&bigBoardWinners[nextRequired])nextRequired=null;
+  currentPlayer=currentPlayer==='X'?'O':'X';
+  turnIndicator.textContent='Turno: '+currentPlayer;
+  updateHighlights();
+  checkGlobalWinner();
+  if(!gameOver && botMode.startsWith('bot') && currentPlayer==='O'){
+    setTimeout(botMove,300);
+  }
+}
+
+function checkSmallWin(bigIndex){
+  const {cells,board}=boards[bigIndex];
+  const vals=cells.map(c=>c.textContent.trim()||'');
+  for(const line of wins){
+    const [a,b,c]=line;
+    if(vals[a]&&vals[a]===vals[b]&&vals[a]===vals[c]){
+      bigBoardWinners[bigIndex]=vals[a];
+      placeBigWinner(board,vals[a]);
+      return;
+    }
+  }
+  if(vals.every(v=>v)){
+    bigBoardWinners[bigIndex]='T';
+    placeBigWinner(board,null);
+  }
+}
+
+function placeBigWinner(boardEl,winner){
+  const overlay=document.createElement('div');
+  overlay.className='big-winner';
+  if(winner==='X')overlay.innerHTML='<span class="x-mark">X</span>';
+  else if(winner==='O')overlay.innerHTML='<span class="o-mark">O</span>';
+  else overlay.innerHTML='<span style="color:#64748b;font-weight:800">●</span>';
+  boardEl.appendChild(overlay);
+  boardEl.querySelectorAll('.cell').forEach(c=>{c.style.pointerEvents='none';c.classList.add('disabled');c.classList.remove('allowed')});
+}
+
+function checkGlobalWinner(){
+  const g=bigBoardWinners.map(x=>(x==='X'||x==='O')?x:'');
+  for(const line of wins){
+    const [a,b,c]=line;
+    if(g[a]&&g[a]===g[b]&&g[a]===g[c]){
+      gameOver=true;
+      boards.forEach(b=>b.board.querySelectorAll('.cell').forEach(c=>c.style.pointerEvents='none'));
+      showGameResult('¡Ha ganado el jugador '+g[a]+' en el tablero grande!');
+      return;
+    }
+  }
+  if(bigBoardWinners.every(x=>x)){
+    gameOver=true;
+    showGameResult('Empate global');
+  }
+}
+
+function showGameResult(text){
+  banner.textContent=text;
+  banner.style.display='block';
+  banner.animate([{transform:'translateY(-10px)',opacity:0},{transform:'translateY(0)',opacity:1}],{duration:360,easing:'cubic-bezier(.2,.9,.2,1)'});
+}
+
+function botMove(){
+  if(gameOver)return;
+  let options=[];
+  if(nextRequired!==null){
+    options=boards[nextRequired].cells.filter(c=>!c.textContent);
+  }else{
+    boards.forEach(b=>{
+      if(!bigBoardWinners[b.board.dataset.index])b.cells.forEach(c=>{if(!c.textContent)options.push(c)})
+    });
+  }
+  if(options.length===0)return;
+  let choice;
+  if(botMode==='bot_easy'){
+    choice=mediumBotChoice(options);
+  } else {
+    choice=difficultBotChoice(options);
+  }
+  const boardEl=choice.parentElement;
+  handleMove(boardEl,choice);
+}
+
+function mediumBotChoice(options){
+  // La antigua heurística del medio ahora es fácil
+  for(const c of options){
+    const bIndex=c.parentElement.dataset.index;
+    const cells=boards[bIndex].cells.map(cl=>cl.textContent.trim()||'');
+    cells[c.dataset.index]=currentPlayer;
+    for(const line of wins){
+      const [a,b,d]=line;
+      if(cells[a]&&cells[a]===cells[b]&&cells[a]===cells[d]) return c;
+    }
+  }
+  return options[Math.floor(Math.random()*options.length)];
+}
+
+function difficultBotChoice(options){
+  // Heurística avanzada mejorada
+  const priorities=[];
+  for(const c of options){
+    const bIndex=c.parentElement.dataset.index;
+    const cells=boards[bIndex].cells.map(cl=>cl.textContent.trim()||'');
+    // Ganar tablero pequeño
+    cells[c.dataset.index]=currentPlayer;
+    for(const line of wins){
+      const [a,b,d]=line;
+      if(cells[a]&&cells[a]===cells[b]&&cells[a]===cells[d]) return c;
+    }
+    // Bloquear jugador
+    const opp='X';
+    cells[c.dataset.index]=opp;
+    for(const line of wins){
+      const [a,b,d]=line;
+      if(cells[a]&&cells[a]===cells[b]&&cells[a]===cells[d]) priorities.push(c);
+    }
+  }
+  if(priorities.length>0)return priorities[0];
+  // Prioriza tablero central
+  for(const c of options){
+    if(c.parentElement.dataset.index==4)return c;
+  }
+  // Prioriza esquinas
+  for(const c of options){
+    if([0,2,6,8].includes(Number(c.dataset.index)))return c;
+  }
+  // Bloqueo avanzado: evitar enviar jugador a ganar
+  for(const c of options){
+    if(!createsImmediateThreat(c))return c;
+  }
+  return options[0];
+}
+
+function createsImmediateThreat(c){
+  const index=Number(c.parentElement.dataset.index);
+  const cellIndex=Number(c.dataset.index);
+  const temp=boards[index].cells.map(cl=>cl.textContent.trim()||'');
+  temp[cellIndex]='X';
+  for(const line of wins){
+    const [a,b,d]=line;
+    if(temp[a]&&temp[a]===temp[b]&&temp[a]===temp[d]) return true;
+  }
+  return false;
+}
+
+resetBtn.addEventListener('click',init);
+init();
+</script>
+</body>
+</html>
